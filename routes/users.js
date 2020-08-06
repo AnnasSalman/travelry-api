@@ -5,6 +5,8 @@ const User = require('../models/user');
 const Hotel = require('../models/hotel')
 const passport = require('passport');
 const authenticate = require('../middlewares/authenticate');
+const upload = require('../middlewares/multer')
+
 router.use(bodyParser.json());
 
 /* GET users listing. */
@@ -131,4 +133,15 @@ router.post('/addrooms', authenticate.verifyUser, async(req, res)=>{
   }
 })
 
+router.put('/hotel/:id/updaterooms', async(req, res) => {
+  try{
+    setTimeout(async function(){
+      const hotel = await Hotel.findOneAndUpdate({_id: req.params.id},{roomInfo: req.body.roomInfo},{useFindAndModify: false, new: true})
+      res.status(200).send({status: 'hotel updated', roomInfo: hotel.roomInfo})
+    }, 2000);
+  }
+  catch(e){
+    res.status(400).send({status: 'could not update hotel'})
+  }
+})
 module.exports = router;

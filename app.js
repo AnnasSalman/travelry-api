@@ -6,6 +6,7 @@ var logger = require('morgan');
 var mongoose = require('mongoose');
 var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
+var hotelRouter = require('./routes/hotels')
 var passport = require('passport');
 var config = require('./config');
 var cors = require('cors');
@@ -28,6 +29,7 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', indexRouter);
 app.use('/users', usersRouter);
+app.use('/hotels', hotelRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
