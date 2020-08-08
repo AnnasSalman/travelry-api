@@ -2,7 +2,7 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
 
 var Rooms = new Schema({
-    hotel: {
+    hotelroomid: {
         type: mongoose.Types.ObjectId,
         ref: 'Hotel'
     },

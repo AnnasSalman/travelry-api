@@ -18,7 +18,6 @@ router.get('/:hotelid/getimages/:roomid', (req, res)=>{
     glob(req.params.hotelid+'-'+req.params.roomid+'-*.jpg',options,  (err, files) => {
         if(err){
             res.send(err)
-            //res.sendfile('./public/uploads/somehotelia-someroomia-pic1.jpg')
         }
         else{
             res.send(files)

@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const bodyParser = require('body-parser');
 const User = require('../models/user');
-const Hotel = require('../models/hotel')
+const Hotel = require('../models/hotel');
+const Booking = require('../models/booking')
 const passport = require('passport');
 const authenticate = require('../middlewares/authenticate');
 const upload = require('../middlewares/multer')
@@ -100,16 +101,42 @@ router.post('/login', passport.authenticate('local'), (req, res) => {
   res.json({ success: true, token: token, status: 'You are successfully logged in!',user:req.user });
 });
 
-router.post('/addhotel', authenticate.verifyUser, async(req, res)=>{
-  console.log('entered')
+router.post('/addhotel', async(req, res)=>{
+  console.log(req.body.user)
+  let hotel = {}
   try{
-    const user = await User.findById(req.user).exec();
+    const user = await User.findById(req.body.user).exec();
     if(user){
-      await Hotel.create(req.body)
-      res.status(200).send({success: true})
+      hotel = await Hotel.create(req.body)
     }
     else{
       res.status(400).send({success: false, error: 'User not found'})
+    }
+    try
+      {req.body.roomInfo.forEach((room=>{
+        for(let i = 0; i < room.numberOfRooms; i++){
+          const addBooking = async() => {
+            await Booking.create({
+              hotelid: hotel._id,
+              roomid: room.key,
+              guestlimit: room.amountOfGuests,
+              price: room.price,
+              bookings: [
+                {
+                  from: String,
+                  to: String,
+                }
+              ]
+            }
+            )
+          }
+          addBooking()
+        }
+      }))
+        res.status(200).send({success: true})
+      }
+    catch(e){
+      res.status(400).send(e)
     }
   }
   catch (e) {
@@ -137,6 +164,17 @@ router.put('/hotel/:id/updaterooms', async(req, res) => {
   try{
     setTimeout(async function(){
       const hotel = await Hotel.findOneAndUpdate({_id: req.params.id},{roomInfo: req.body.roomInfo},{useFindAndModify: false, new: true})
+      console.log(req.body.room)
+      await Booking.updateMany({
+        hotelid: req.params.id,
+        roomid: req.body.room.key
+      },
+          { $set:
+                {
+                  guestlimit: req.body.room.amountOfGuests,
+                  price: req.body.room.price
+                }
+          });
       res.status(200).send({status: 'hotel updated', roomInfo: hotel.roomInfo})
     }, 2000);
   }
