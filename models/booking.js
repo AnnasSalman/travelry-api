@@ -16,8 +16,6 @@ var Booking = new Schema({
     ],
     guestlimit: {type: Number},
     price: {type: Number}
-
-
 });
 
 module.exports = mongoose.model('Booking', Booking);
