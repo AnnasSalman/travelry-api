@@ -163,31 +163,41 @@ router.get('/hotel/checkroomsavailability',async(req, res)=>{
 })
 
 router.post('/rooms/book', async(req, res)=>{
-
+    let rooms = []
     for(const roomSpecificId of req.body.roomSpecificIds){
-        const rooms = []
-        const room = await Booking.find({
-            _id: roomSpecificId,
-            bookings:{
-                $not:{
-                    $elemMatch: {from: {$lt: req.body.to.substring(0,10)}, to: {$gt: req.body.from.substring(0,10)}}
+        try{
+            const room = await Booking.find({
+                _id: roomSpecificId,
+                bookings:{
+                    $not:{
+                        $elemMatch: {from: {$lt: req.body.to.substring(0,10)}, to: {$gt: req.body.from.substring(0,10)}}
+                    }
                 }
-            }
-        })
-        rooms.push(room)
+            })
+            rooms.push(...room)
+        }
+        catch(e){
+            res.send(e)
+        }
     }
     if(req.body.roomSpecificIds.length==rooms.length){
         const bookings = []
-        for(const roomSpecificId of req.body.roomSpecificIds){
-            const booking = Booking.findByIdAndUpdate(roomSpecificID, {
-                $push: {"bookings": {from: req.body.from, to: req.body.to}}
-            }, {
-                safe: true,
-                new: true
-            })
-            bookings.push(booking)
+        try{
+            for(const roomSpecificId of req.body.roomSpecificIds){
+                    const booking = await Booking.findByIdAndUpdate(roomSpecificId, {
+                        $push: {"bookings": {from: req.body.from, to: req.body.to}}
+                    }, {
+                        safe: true,
+                        new: true
+                    })
+                console.log()
+                bookings.push(booking)
+            }
+            res.send(bookings)
         }
-        res.send(bookings)
+        catch(e){
+            res.status(400).send(e)
+        }
     }
     else{
         res.status(400).send()
