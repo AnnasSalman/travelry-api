@@ -5,91 +5,46 @@ const Route = require('../classes/Route')
 const Plan = require('../classes/Plan')
 const Booking = require('../models/booking')
 const Hotel = require('../models/hotel')
+const puppeteer = require('puppeteer')
+const demo = require('../demo/demo')
+const Interests = require('../classes/Interests')
+const HotelSearch = require('../classes/Hotel')
+const Resources = require('../classes/Resources')
+
+router.get('/getfuelprice', async (req, res)=>{
+    const scrapeFuelPrice = async(url) => {
+        const browser = await puppeteer.launch()
+        const page = await browser.newPage()
+        await page.goto(url)
+
+        const [el] = await page.$x('/html/body/div[2]/div[4]/div/div/div/div[2]/div/div[1]/table/tbody/tr[2]/td[2]')
+        const src = await el.getProperty('textContent')
+        const srcText = await src.jsonValue()
+        return srcText
+    }
+    try{
+        // const Hotelsearch = new HotelSearch()
+        // const result = await Hotelsearch.searchHotel()
+        // res.send(result)
+        // const price = await scrapeFuelPrice('https://psopk.com/en/product-and-services/product-prices/pol')
+        // res.send(price)
+    }
+    catch(e){
+        res.status(200).send(e)
+    }
+})
 
 router.get('/generatetour', async(req, res)=>{
-    const {coordinates, dates, budget, hobbies} = req.query
+    const {coordinates, dates, budget, hobbies, fuelAverage} = req.query
     let coordinateString = ''
     coordinates.forEach((coordinate)=>{
         coordinateString+=coordinate+'|'
     })
     const route = new Route(coordinateString)
-    //const route = new Route('33.693852,73.065305|33.916725,73.396740|34.072142,73.386269|33.591368,73.053589|')
     try{
+
+        // GENERAL PLAN CREATION
         const shortestTrip = await route.calculateShortestTrip()
-        // const shortestTrip = [
-        //         {
-        //             name: "Islamabad Expressway, Islamabad, Islamabad Capital Territory, Pakistan",
-        //             type: "origin",
-        //             distance: {
-        //                 text: "0 km",
-        //                 value: 0
-        //             },
-        //             duration: {
-        //                 text: "0 mins",
-        //                 value: 0
-        //             },
-        //             geometry: {
-        //                 coordinates: {
-        //                     lat: 33.693852,
-        //                     lng: 73.065305
-        //                 }
-        //             }
-        //         },
-        //         {
-        //             name: "Murree Rd, Rawalpindi, Punjab 46000, Pakistan",
-        //             type: "origin",
-        //             distance: {
-        //                 text: "13.3 km",
-        //                 value: 13274
-        //             },
-        //             duration: {
-        //                 text: "21 mins",
-        //                 value: 1277
-        //             },
-        //             geometry: {
-        //                 coordinates: {
-        //                     lat: 33.591368,
-        //                     lng: 73.053589
-        //                 }
-        //             }
-        //         },
-        //         {
-        //             name: "Kashmir Rd, Murree, Rawalpindi, Khyber Pakhtunkhwa, Pakistan",
-        //             type: "origin",
-        //             distance: {
-        //                 text: "59.7 km",
-        //                 value: 59695
-        //             },
-        //             duration: {
-        //                 text: "1 hour 45 mins",
-        //                 value: 6301
-        //             },
-        //             geometry: {
-        //                 coordinates: {
-        //                     lat: 33.916725,
-        //                     lng: 73.396740
-        //                 }
-        //             }
-        //         },
-        //         {
-        //             name: "Nathia Gali Rd, Nathia Gali, Abbottabad, Khyber Pakhtunkhwa, Pakistan",
-        //             type: "origin",
-        //             distance: {
-        //                 text: "32.2 km",
-        //                 value: 32192
-        //             },
-        //             duration: {
-        //                 text: "1 hour 14 mins",
-        //                 value: 4457
-        //             },
-        //             geometry: {
-        //                 coordinates: {
-        //                     lat: 34.072142,
-        //                     lng: 73.386269
-        //                 }
-        //             }
-        //         }
-        //     ]
         const plan = new Plan(dates.length,15000, shortestTrip)
         const tour = await plan.generateTour()
         let dateSchedule = {}
@@ -100,9 +55,77 @@ router.get('/generatetour', async(req, res)=>{
                     temp.push(location)
                 }
             })
-            dateSchedule = {...dateSchedule, [date]: [{locationstoVisit: temp, index: index+1}]}
+            dateSchedule = {...dateSchedule, [date]: [{locationstoVisit: temp, index: index+1, date}]}
         })
-        res.send({tour: tour, dateSchedule})
+
+        // PLACES TO VISIT DURING STAY
+        const placesToVisit = tour.route
+        // const placesToVisit = demo.tour.route
+        // const dateSchedule = demo.dateSchedule
+        const stays = []
+        placesToVisit.forEach((place, index)=>{
+            if (place.stayDuration > 1) {
+                stays.push({index, place})
+            }
+        })
+        console.log('Stays=='+ stays)
+        for(const stay of stays){
+            const tourInterests = new Interests(hobbies)
+            const placesOfInterest = await tourInterests.getPlaceRecommendations(stay.place.geometry.coordinates)
+            placesToVisit[stay.index].availablePlaces = placesOfInterest
+            let selectedLocalLocationIndex = 0
+            let tempFix = 0
+            stay.place.tourDays.length>3?tempFix=2:tempFix=1
+            for(let i = 1; i < stay.place.tourDays.length - tempFix; i++){
+                dateSchedule[dates[stay.place.tourDays[i]]][0].localAvailableLocations = placesOfInterest
+                dateSchedule[dates[stay.place.tourDays[i]]][0].localSelectedLocations = placesOfInterest[selectedLocalLocationIndex]
+                selectedLocalLocationIndex+=1
+            }
+        }
+
+        // TOUR DISTANCE CALCULATION
+        let tourWithDistances = {tour: {route: placesToVisit}, dateSchedule}
+
+        // Adding distance for all dates in DateSchedule (local trips + travels)
+        for(const date of dates){
+            if(tourWithDistances.dateSchedule[date][0].locationstoVisit.length>1){
+                let distanceCovered = 0
+                for(let i = 0; i<tourWithDistances.dateSchedule[date][0].locationstoVisit.length; i++){
+                    distanceCovered = distanceCovered + tourWithDistances.dateSchedule[date][0].locationstoVisit[i].distance.value
+                }
+                tourWithDistances = {...tourWithDistances, dateSchedule: {...tourWithDistances.dateSchedule, [date]:[{...tourWithDistances.dateSchedule[date][0], distanceCovered}]}}
+            }
+            else{
+                tourWithDistances = {...tourWithDistances, dateSchedule: {...tourWithDistances.dateSchedule, [date]:[{...tourWithDistances.dateSchedule[date][0], distanceCovered: 0}]}}
+            }
+            if(tourWithDistances.dateSchedule[date][0].localSelectedLocations){
+                const sourceCoordinates = tourWithDistances.dateSchedule[date][0].locationstoVisit[0].geometry.coordinates
+                const destinationCoordinates = tourWithDistances.dateSchedule[date][0].localSelectedLocations.geometry.location
+                const tempCoordinates = new Route(sourceCoordinates.lat+','+sourceCoordinates.lng+'|'+destinationCoordinates.lat+','+destinationCoordinates.lng)
+                const distance = await tempCoordinates.getDistance()
+                tourWithDistances = {...tourWithDistances, dateSchedule: {...tourWithDistances.dateSchedule, [date]:[{...tourWithDistances.dateSchedule[date][0], localSelectedLocations: {...tourWithDistances.dateSchedule[date][0].localSelectedLocations, distanceCovered: distance*2}}]}}
+            }
+        }
+
+        // Adding Total distance
+        let totalTourDistance = 0
+        dates.forEach((date)=>{
+                totalTourDistance += tourWithDistances.dateSchedule[date][0].distanceCovered
+                if (tourWithDistances.dateSchedule[date][0].localSelectedLocations) {
+                    totalTourDistance += tourWithDistances.dateSchedule[date][0].localSelectedLocations.distanceCovered
+                }
+        })
+        tourWithDistances = {...tourWithDistances, totalTourDistance}
+
+        // Get fuel prices and calculate total tour expenditure on fuel (approx)
+        const resources = new Resources()
+        const fuelPrice = await resources.getPetrolPrices()
+        const expenditureOnFuel = ((totalTourDistance/1000)/fuelAverage) * fuelPrice
+
+
+        res.send(tourWithDistances)
+
+
     }
     catch(e){
         console.log(e)

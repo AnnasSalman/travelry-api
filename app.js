@@ -13,6 +13,21 @@ var passport = require('passport');
 var config = require('./config');
 var cors = require('cors');
 var authenticate = require('./middlewares/authenticate');
+var CronJob = require('cron').CronJob;
+var Resources = require('./classes/Resources')
+
+const ResourceUpdates = new Resources()
+
+const updateFuelPrices = new CronJob('00 00 00 * * *', async () => {
+    try{
+        await ResourceUpdates.updatePetrolPrice()
+        console.log('Updated Petrol Price')
+    }
+    catch(e){
+        console.log('error updating petrol prices')
+    }
+}, null, true, 'Asia/Karachi');
+updateFuelPrices.start();
 
 if (process.env.NODE_ENV !== 'production') {
     require('dotenv').config({path: path.resolve( __dirname,'secrets.env')});
@@ -45,6 +60,8 @@ app.use('/tours', toursRouter)
 app.use(function(req, res, next) {
     next(createError(404));
 });
+
+
 
 // error handler
 app.use(function(err, req, res, next) {

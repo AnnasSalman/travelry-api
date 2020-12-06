@@ -4,10 +4,23 @@ class Route{
 
     //set of string coordinates separated by |
     //33.693852,73.065305|33.591368,73.053589|33.916725,73.396740|34.072142,73.386269
-    //First one are the source coordinates
+    //First ones are the source coordinates
     constructor(coordinates) {
         this._coordinates = coordinates
         console.log(coordinates)
+    }
+
+    async getDistance(){
+        const distance = await axios.request({
+            url:'https://maps.googleapis.com/maps/api/distancematrix/json',
+            method: 'get',
+            params: {
+                origins: this._coordinates,
+                destinations: this._coordinates,
+                key: process.env.mapsKey
+            }
+        })
+        return distance.data.rows[0].elements[1].distance.value
     }
 
     async calculateShortestTrip(){

@@ -9,6 +9,7 @@
     "axios": "^0.20.0",
     "cookie-parser": "~1.4.4",
     "cors": "^2.8.5",
+    "cron": "^1.8.2",
     "debug": "~2.6.9",
     "dotenv": "^8.2.0",
     "expo-secure-store": "^9.0.1",
@@ -27,6 +28,7 @@
     "passport-jwt": "^4.0.0",
     "passport-local": "^1.0.0",
     "passport-local-mongoose": "^6.0.1",
-    "path-to-regexp": "^6.1.0"
+    "path-to-regexp": "^6.1.0",
+    "puppeteer": "^5.5.0"
   }
 }
