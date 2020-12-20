@@ -19,6 +19,7 @@ router.get('/findrooms', async (req, res)=>{
             }
         }, function(err, rooms){
             if(err){
+                console.log('entered')
                 res.send(err);
             } else {
                 res.json(rooms);

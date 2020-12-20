@@ -3,39 +3,23 @@ const router = express.Router();
 const axios = require('axios')
 const Route = require('../classes/Route')
 const Plan = require('../classes/Plan')
-const Booking = require('../models/booking')
-const Hotel = require('../models/hotel')
-const puppeteer = require('puppeteer')
+const Hotel = require('../classes/hotel')
 const demo = require('../demo/demo')
 const Interests = require('../classes/Interests')
 const HotelSearch = require('../classes/Hotel')
 const Resources = require('../classes/Resources')
+const Tour = require('../models/tour')
 
-router.get('/getfuelprice', async (req, res)=>{
-    const scrapeFuelPrice = async(url) => {
-        const browser = await puppeteer.launch()
-        const page = await browser.newPage()
-        await page.goto(url)
-
-        const [el] = await page.$x('/html/body/div[2]/div[4]/div/div/div/div[2]/div/div[1]/table/tbody/tr[2]/td[2]')
-        const src = await el.getProperty('textContent')
-        const srcText = await src.jsonValue()
-        return srcText
-    }
-    try{
-        // const Hotelsearch = new HotelSearch()
-        // const result = await Hotelsearch.searchHotel()
-        // res.send(result)
-        // const price = await scrapeFuelPrice('https://psopk.com/en/product-and-services/product-prices/pol')
-        // res.send(price)
-    }
-    catch(e){
-        res.status(200).send(e)
-    }
-})
+const _averageRatings = (ratings) => {
+    let sum = 0
+    ratings.forEach((rating)=>{
+        sum+=rating.stars
+    })
+    return (sum/ratings.length).toFixed(1)
+}
 
 router.get('/generatetour', async(req, res)=>{
-    const {coordinates, dates, budget, hobbies, fuelAverage} = req.query
+    const {coordinates, dates, budget, hobbies, fuelAverage, fuelType, guests} = req.query
     let coordinateString = ''
     coordinates.forEach((coordinate)=>{
         coordinateString+=coordinate+'|'
@@ -119,18 +103,150 @@ router.get('/generatetour', async(req, res)=>{
 
         // Get fuel prices and calculate total tour expenditure on fuel (approx)
         const resources = new Resources()
-        const fuelPrice = await resources.getPetrolPrices()
-        const expenditureOnFuel = ((totalTourDistance/1000)/fuelAverage) * fuelPrice
+        const fuelPrice = await resources.getFuelPrices(fuelType)
+        const expenditureOnFuel = ((tourWithDistances.totalTourDistance/1000)/fuelAverage) * fuelPrice
+        const expenditureForHotelStays = budget - expenditureOnFuel
 
+        const totalHotelStaysDuration = tourWithDistances.tour.route.reduce((a, b) => a + (b.stayDuration || 0), 0);
+        const totalHotelStaysWeights = tourWithDistances.tour.route.map(routeLocation=>routeLocation.stayDuration/totalHotelStaysDuration)
 
-        res.send(tourWithDistances)
+        // Add bookings to the tour
+        let tourWithBookings = tourWithDistances
+        for(const [index, stayLocation] of tourWithDistances.tour.route.entries()){
+            if(stayLocation.stayDuration>0){
+                const checkInDate = dates[stayLocation.tourDays[0]-1]
+                const checkOutDate = dates[stayLocation.tourDays[stayLocation.tourDays.length-1]-1]
+                const hotels = new HotelSearch(
+                    parseFloat(stayLocation.geometry.coordinates.lat),
+                    parseFloat(stayLocation.geometry.coordinates.lng),
+                    checkInDate,
+                    checkOutDate
+                )
+                const budgetForThisStayPerRoomPerDay = (expenditureForHotelStays*totalHotelStaysWeights[index])/stayLocation.stayDuration
+                let results = []
+                if(expenditureOnFuel<0){
+                    results = await hotels.getCheapestRoomOptions(10000, parseInt(guests))
+                }
+                else{
+                    results = await hotels.getBestRoomOptions(parseInt(budgetForThisStayPerRoomPerDay), 10000, parseInt(guests))
+                }
+                const resultsWithTotals = []
+                for(const [index, result] of results.entries()){
+                    let total = 0
+                    result.forEach((resultRoom)=>{
+                        console.log(tourWithDistances.tour.route[index].stayDuration)
+                        total+=resultRoom.price*stayLocation.stayDuration
+                    })
+                    const someHotel = new Hotel()
+                    const hotelData = await someHotel.findHotelDetailsById(result[0].hotelid)
+                    resultsWithTotals.push({
+                        hotel: hotelData,
+                        rooms: result,
+                        total: total,
+                        stayDuration: stayLocation.stayDuration
+                    })
+                }
+                tourWithBookings = {...tourWithBookings, dateSchedule: {...tourWithBookings.dateSchedule, [checkInDate]: [{...tourWithBookings.dateSchedule[checkInDate][0], bookings: resultsWithTotals}]}}
+            }
+        }
 
-
+        res.send(tourWithBookings)
+        // setTimeout(function(){
+        //     res.send(demo)
+        // }, 12000);
     }
     catch(e){
         console.log(e)
         res.status(400).send(e)
     }
 })
+
+router.get('/getmytours/:userId/:type', async(req, res) => {
+    try{
+        const {userId, type} = req.params
+        const publishedTours = await Tour.find({'user.id': userId, public: type==='saved'?false:true}, '_id cities title description user dateSchedule ratings totalTourDistance')
+        let publishedToursWithdays = []
+        publishedTours.forEach((publishedTour)=>{
+            const {_id, cities, title, description, user, dateSchedule, ratings, totalTourDistance} = publishedTour
+            publishedToursWithdays.push({_id, cities, title, description, user, time: Object.keys(dateSchedule).length, ratings, totalTourDistance})
+        })
+        res.send(publishedToursWithdays)
+    }
+    catch(e){
+        console.log(e)
+        res.status(400).send(e)
+    }
+})
+
+router.get('/gettoursbyrating', async(req, res)=>{
+    try{
+        const tours = await Tour.find({public: true}, '_id cities title description user dateSchedule ratings averageRating totalTourDistance')
+        const toursWithTime = []
+        tours.forEach((tour)=>{
+            const {_id, cities, title, description, user, dateSchedule, ratings, averageRating, totalTourDistance} = tour
+            toursWithTime.push({_id, cities, title, description, user, time: Object.keys(dateSchedule).length, ratings, averageRating, totalTourDistance})
+        })
+        toursWithTime.sort(function(a, b){
+            return _averageRatings(b.ratings) - _averageRatings(a.ratings)
+        });
+        res.send(toursWithTime)
+    }
+    catch(e){
+        res.status(400).send()
+    }
+})
+
+router.get('/gettoursnearme', async(req, res)=> {
+    try{
+        const lat = req.query.lat
+        const lng = req.query.lng
+        const tours = await Tour.find({public: true}, '_id cities title description user dateSchedule ratings averageRating totalTourDistance').getNearbyTours(lat, lng, 30000)
+        tours.sort(function(a, b){
+            return b.ratings.length - a.ratings.length
+        });
+        const toursWithTime = []
+        tours.forEach((tour)=>{
+            const {_id, cities, title, description, user, dateSchedule, ratings, averageRating, totalTourDistance} = tour
+            toursWithTime.push({_id, cities, title, description, user, time: Object.keys(dateSchedule).length, ratings, averageRating, totalTourDistance})
+        })
+        res.send(toursWithTime)
+    }
+    catch (e){
+        console.log(e)
+        res.status(400).send()
+    }
+})
+
+router.post('/rateTour/:tourId', async (req, res) => {
+    const {tourId} = req.params
+    const {rating} = req.body
+    try{
+        await Tour.update({_id: tourId},
+            {
+                $push: {
+                    ratings: rating
+                }
+            }
+        )
+        res.status(200).send()
+    }
+    catch(e){
+        res.status(400).send()
+    }
+})
+
+router.post('/savetour', async (req, res) => {
+    try{
+        const lon = req.body.tour.route[0].geometry.coordinates.lng
+        const lat = req.body.tour.route[0].geometry.coordinates.lat
+        const tour = await Tour.create({...req.body, ratings: [], geometry: {coordinates: [lon, lat]}})
+        res.send('ok')
+    }
+    catch(e){
+        console.log(e)
+        res.status(400).send(e)
+    }
+})
+
 
 module.exports = router;
