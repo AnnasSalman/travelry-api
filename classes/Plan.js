@@ -80,9 +80,9 @@ class Plan{
         this._hotelDistanceSmallWeight = 60;
         this._hotelDistanceMediumWeight = 30;
         this._hotelDistanceLargeWeight = 10;
-        this._hotelDistanceSmall = 1500;
-        this._hotelDistanceMedium = 2500;
-        this._hotelDistanceLarge = 4000;
+        this._hotelDistanceSmall = 2000;
+        this._hotelDistanceMedium = 6500;
+        this._hotelDistanceLarge = 15000;
     }
 
     async calculatePlaceStaysProbability (lat, lng) {

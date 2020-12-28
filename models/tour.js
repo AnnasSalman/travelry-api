@@ -19,7 +19,21 @@ var Tour = new Schema({
     ratings: [],
     geometry: {
         coordinates: { type: [Number], index: '2dsphere'}
-    }
+    },
+    fuelAverage: {
+        type: 'Number'
+    },
+    fuelPrice:{
+        type: 'Decimal128'
+    },
+    guests: {
+        type: 'Number'
+    },
+    totalBudget: {
+        type: 'Number'
+    },
+    hobbies: []
+
 
 });
 

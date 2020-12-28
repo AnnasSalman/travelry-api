@@ -18,6 +18,8 @@ const _averageRatings = (ratings) => {
     return (sum/ratings.length).toFixed(1)
 }
 
+
+
 router.get('/generatetour', async(req, res)=>{
     const {coordinates, dates, budget, hobbies, fuelAverage, fuelType, guests} = req.query
     let coordinateString = ''
@@ -143,10 +145,10 @@ router.get('/generatetour', async(req, res)=>{
                         hotel: hotelData,
                         rooms: result,
                         total: total,
-                        stayDuration: stayLocation.stayDuration
+                        stayDuration: stayLocation.stayDuration,
                     })
                 }
-                tourWithBookings = {...tourWithBookings, dateSchedule: {...tourWithBookings.dateSchedule, [checkInDate]: [{...tourWithBookings.dateSchedule[checkInDate][0], bookings: resultsWithTotals}]}}
+                tourWithBookings = {...tourWithBookings, dateSchedule: {...tourWithBookings.dateSchedule, [checkInDate]: [{...tourWithBookings.dateSchedule[checkInDate][0], bookings: resultsWithTotals}]},fuelPrice, fuelAverage, hobbies, guests}
             }
         }
 
@@ -217,7 +219,17 @@ router.get('/gettoursnearme', async(req, res)=> {
     }
 })
 
-router.post('/rateTour/:tourId', async (req, res) => {
+router.get('/gettourbyid/:id', async(req, res)=>{
+    try{
+        const tours = await Tour.findById(req.params.id)
+        res.send(tours)
+    }
+    catch(e){
+        res.status(400).send()
+    }
+})
+
+router.post('/ratetour/:tourId', async (req, res) => {
     const {tourId} = req.params
     const {rating} = req.body
     try{
@@ -225,6 +237,24 @@ router.post('/rateTour/:tourId', async (req, res) => {
             {
                 $push: {
                     ratings: rating
+                }
+            }
+        )
+        res.status(200).send()
+    }
+    catch(e){
+        res.status(400).send()
+    }
+})
+
+router.post('/updatetourrating/:tourId', async (req, res) => {
+    const {tourId} = req.params
+    const {rating} = req.body
+    try{
+        await Tour.update({_id: tourId, 'ratings.userid': rating.userid},
+            {
+                $set: {
+                    'ratings.$.stars':rating.stars
                 }
             }
         )

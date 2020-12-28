@@ -9,7 +9,13 @@ const path = require('path')
 router.use(bodyParser.json());
 
 router.get('/findrooms', async (req, res)=>{
-        Booking.find({
+    try{
+        const hotelids = await Hotel.find({},'_id').getNearbyHotels(req.query.lat, req.query.lng, 15000)
+        const ids = hotelids.map((hotel)=>{
+            return hotel._id
+        })
+        console.log(ids)
+        const rooms = await Booking.find({
             guestlimit: {$gt: parseInt(req.query.guests)-1},
             price: {$gte: req.query.lower, $lte: req.query.upper},
             bookings: {
@@ -17,14 +23,27 @@ router.get('/findrooms', async (req, res)=>{
                     $elemMatch: {from: {$lt: req.query.to.substring(0,10)}, to: {$gt: req.query.from.substring(0,10)}}
                 }
             }
-        }, function(err, rooms){
-            if(err){
-                console.log('entered')
-                res.send(err);
-            } else {
-                res.json(rooms);
-            }
-        });
+        }).where('hotelid').in(ids);
+        res.send(rooms)
+    }
+    catch(e){
+        res.status(400).send()
+    }
+    //     Booking.find({
+    //         guestlimit: {$gt: parseInt(req.query.guests)-1},
+    //         price: {$gte: req.query.lower, $lte: req.query.upper},
+    //         bookings: {
+    //             $not: {
+    //                 $elemMatch: {from: {$lt: req.query.to.substring(0,10)}, to: {$gt: req.query.from.substring(0,10)}}
+    //             }
+    //         }
+    //     }, function(err, rooms){
+    //         if(err){
+    //             res.send(err);
+    //         } else {
+    //             res.json(rooms);
+    //         }
+    //     });
 })
 
 router.get('/findroomsbyid/:hotelid/:roomid', async (req, res)=> {
